@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASX Ex-Dividend Recovery Pattern Analyzer</title>
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📉</text></svg>">
+</head>
+<body>
+<div class="layout">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">XD</div>
+      <h1>Ex-Div Recovery<span>ASX pattern analyzer</span></h1>
+    </div>
+
+    <nav class="side-nav" id="side-nav">
+      <button class="nav-btn active" data-view="top20">
+        <span class="nav-ic">◈</span> ASX Top 20 Opportunities
+      </button>
+      <button class="nav-btn" data-view="single">
+        <span class="nav-ic">◱</span> Single company analysis
+      </button>
+    </nav>
+
+    <div class="side-section">
+      <h2>Stock search</h2>
+      <div class="search-row">
+        <input id="ticker-input" placeholder="e.g. BHP" maxlength="8" autocomplete="off"
+               aria-label="ASX ticker code">
+        <button class="primary" id="analyze-btn">Analyse</button>
+      </div>
+      <div id="search-error" style="color:var(--critical);font-size:12.5px;margin-top:6px;display:none;"></div>
+    </div>
+
+    <div class="side-section">
+      <h2>Saved companies</h2>
+      <div class="saved-list" id="saved-list"></div>
+    </div>
+
+    <div class="side-section settings">
+      <h2>Settings</h2>
+      <label>History window
+        <select id="years-select">
+          <option value="10">10 years</option>
+          <option value="15">15 years</option>
+          <option value="20" selected>20 years</option>
+          <option value="25">25 years</option>
+        </select>
+      </label>
+      <label>Theme
+        <span class="theme-toggle" id="theme-toggle">
+          <button data-mode="light">Light</button>
+          <button data-mode="auto">Auto</button>
+          <button data-mode="dark">Dark</button>
+        </span>
+      </label>
+      <label style="justify-content:flex-start;gap:8px;">
+        <input type="checkbox" id="ctx-check" checked style="accent-color:var(--series-1);">
+        Show market context
+      </label>
+    </div>
+
+    <div class="side-disclaimer">
+      Historical observations only — not investment advice or future predictions.
+      Past performance does not guarantee future results. Data: Yahoo Finance (may be delayed).
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ============ ASX TOP 20 OPPORTUNITIES ============ -->
+    <section id="view-top20">
+      <div class="report-head">
+        <div>
+          <h2>ASX Top 20 Opportunities</h2>
+          <div class="sub" id="t20-sub">Ranked by Historical Opportunity Score — highest to lowest.</div>
+        </div>
+        <div class="head-actions">
+          <button class="ghost" id="t20-demo-btn" title="Score 20 synthetic companies offline">Demo scan</button>
+          <button class="primary" id="t20-scan-btn">Run scan</button>
+        </div>
+      </div>
+
+      <div class="disclaimer-strip strong">
+        <strong>Historical probability model — not a prediction.</strong>
+        These rankings are derived from approximately 20 years of historical market behaviour
+        and current publicly available broker sentiment. They are intended as a decision-support
+        tool only and do not constitute financial advice or guarantee future performance.
+      </div>
+
+      <div id="t20-banners"></div>
+
+      <div class="t20-intro" id="t20-intro">
+        <div class="intro-card">
+          <h3>Rank the ASX 20 by historical opportunity</h3>
+          <p>This scans each of the ASX 20 companies with the same ex-dividend recovery
+             engine used on the single-company page, then scores each one 0–100 on how
+             closely today resembles its own historically better entry points.</p>
+          <p class="muted-note">The first scan downloads 20 full price histories and takes
+             roughly 1–3 minutes. After that it is cached and near-instant. No internet?
+             Use <strong>Demo scan</strong> to see how it works with synthetic data.</p>
+          <div class="weights-preview" id="weights-preview"></div>
+        </div>
+      </div>
+
+      <div class="scan-progress" id="t20-progress" style="display:none;">
+        <div class="progress-head">
+          <span id="t20-progress-label">Scanning…</span>
+          <span id="t20-progress-count" class="muted-note"></span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="t20-progress-fill"></div></div>
+        <div class="muted-note" id="t20-progress-current"></div>
+      </div>
+
+      <div id="t20-results" style="display:none;">
+        <div class="cards" id="t20-cards"></div>
+
+        <div class="panel">
+          <h3>Opportunity ranking</h3>
+          <div class="panel-sub" id="t20-rank-sub"></div>
+          <div class="filter-row" id="t20-filters">
+            <label>Sort by
+              <select id="t20-sort">
+                <option value="score">Opportunity score</option>
+                <option value="median_recovery_days">Recovery time</option>
+                <option value="avg_drop_pct">Average price drop</option>
+                <option value="success_rate_pct">Recovery probability</option>
+                <option value="best_buy_month">Best buying month</option>
+                <option value="broker">Broker consensus</option>
+                <option value="dividend_yield_pct">Dividend yield</option>
+                <option value="next_ex_date">Upcoming ex-dividend date</option>
+              </select>
+            </label>
+            <label>Band
+              <select id="t20-band">
+                <option value="">All</option>
+                <option value="excellent">Excellent only</option>
+                <option value="strong">Strong and above</option>
+                <option value="neutral">Neutral and above</option>
+              </select>
+            </label>
+            <label>Min recovery probability
+              <select id="t20-minprob">
+                <option value="0">Any</option>
+                <option value="60">60%+</option>
+                <option value="75">75%+</option>
+                <option value="90">90%+</option>
+              </select>
+            </label>
+            <label>Min yield
+              <select id="t20-minyield">
+                <option value="0">Any</option>
+                <option value="2">2%+</option>
+                <option value="4">4%+</option>
+                <option value="6">6%+</option>
+              </select>
+            </label>
+            <label class="chk"><input type="checkbox" id="t20-hidelow"> Hide low-confidence</label>
+            <button class="ghost small" id="t20-reset">Reset</button>
+          </div>
+          <div class="tbl-wrap">
+            <table class="data rank-table" id="t20-table"></table>
+          </div>
+          <div class="tbl-note" id="t20-count-note"></div>
+        </div>
+
+        <div class="panel" id="t20-fail-panel" style="display:none;">
+          <h3>Could not be scored</h3>
+          <div class="panel-sub">These companies are excluded from the ranking rather than
+            given an estimated score.</div>
+          <div id="t20-failures"></div>
+        </div>
+
+        <div class="panel">
+          <details class="method">
+            <summary>How the Opportunity Score is calculated</summary>
+            <div id="t20-method"></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- company detail drawer -->
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+    <aside class="drawer" id="t20-drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <div>
+          <h2 id="drawer-title">—</h2>
+          <div class="sub" id="drawer-sub">—</div>
+        </div>
+        <button class="drawer-close" id="drawer-close" aria-label="Close">×</button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+    </aside>
+
+    <!-- ============ SINGLE COMPANY ============ -->
+    <section id="view-single" style="display:none;">
+
+    <div class="placeholder" id="placeholder">
+      <h2>Analyse ex-dividend recovery patterns</h2>
+      <p>Enter an ASX ticker to see 20 years of price behaviour around every ex-dividend date.</p>
+      <div class="examples">
+        <button class="chip" data-tk="BHP">BHP</button>
+        <button class="chip" data-tk="CBA">CBA</button>
+        <button class="chip" data-tk="WES">WES</button>
+        <button class="chip" data-tk="WOW">WOW</button>
+        <button class="chip" data-tk="TLS">TLS</button>
+        <button class="chip" data-tk="DEMO">Demo data</button>
+      </div>
+    </div>
+
+    <div class="loading-panel" id="loading" style="display:none;">
+      <div class="spinner"></div>
+      <div id="loading-msg">Downloading price history…</div>
+    </div>
+
+    <div class="report" id="report">
+
+      <div class="report-head">
+        <div>
+          <h2 id="r-title">—</h2>
+          <div class="sub" id="r-sub">—</div>
+        </div>
+        <div class="head-actions">
+          <button class="ghost" id="save-btn">☆ Save</button>
+          <button class="ghost" id="refresh-btn">⟳ Refresh data</button>
+        </div>
+      </div>
+
+      <div id="banners"></div>
+
+      <div class="disclaimer-strip">
+        <strong>Historical observations only</strong> — everything below describes what has happened
+        in the past. It is not investment advice and not a prediction of future performance.
+      </div>
+
+      <div class="cards" id="stat-cards"></div>
+
+      <div class="panel">
+        <h3>Long-term price &amp; ex-dividend events</h3>
+        <div class="panel-sub">Split-adjusted closes (weekly before the last 5 years, daily after). Zoom with the slider or mouse wheel.</div>
+        <div class="legend-row" id="price-legend"></div>
+        <div class="chart chart-tall" id="price-chart"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Recovery timeline — every ex-dividend event</h3>
+        <div class="panel-sub">Trading days from ex-date back to the pre-dividend close. Hover an event for its full path: pre-dividend high → ex-date → low → recovery.</div>
+        <div class="legend-row" id="timeline-legend"></div>
+        <div class="chart chart-mid" id="timeline-chart"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Historical timing insights</h3>
+        <div class="panel-sub">Pattern engine output — plain-English observations computed from the events below.</div>
+        <div class="insights" id="insights"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Seasonal timing summary</h3>
+        <div class="panel-sub">The calendar's answer to "when has it historically paid to buy, and when to sell?"</div>
+        <div class="seasonal-grid" id="seasonal"></div>
+      </div>
+
+      <div class="panel-grid">
+        <div class="panel">
+          <h3>Calendar heatmap — months</h3>
+          <div class="panel-sub">How often each calendar month contained the post-dividend low, the pre-dividend high, or the recovery.</div>
+          <div class="chart chart-heat" id="month-heatmap"></div>
+        </div>
+        <div class="panel">
+          <h3>When does the low arrive?</h3>
+          <div class="panel-sub">Distribution of the post-dividend low by weeks after the ex-date.</div>
+          <div class="chart chart-heat" id="lowdist-chart"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Week-of-year heatmap</h3>
+        <div class="panel-sub">Which ISO calendar weeks (1–53) have historically contained lows, highs and recovery dates.</div>
+        <div class="chart chart-heat" id="week-heatmap"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Year-by-year comparison</h3>
+        <div class="panel-sub">Average recovery time and ex-date drop for each year's events.</div>
+        <div class="legend-row" id="year-legend"></div>
+        <div class="chart chart-mid" id="year-chart"></div>
+      </div>
+
+      <div class="panel">
+        <h3>All ex-dividend events</h3>
+        <div class="panel-sub" id="events-sub"></div>
+        <div class="tbl-wrap" style="max-height:430px;overflow-y:auto;">
+          <table class="data" id="events-table"></table>
+        </div>
+        <div class="tbl-note">⚠ marks events with data-quality flags — hover the icon for details. This table is the exact data behind every chart above.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Broker consensus</h3>
+        <div class="panel-sub">Aggregate analyst data — separate from, and independent of, the historical statistical analysis above.</div>
+        <div id="consensus"></div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <h3>Upcoming events</h3>
+          <div class="panel-sub">Informational only — no forecasts. Dates can change; confirm with ASX announcements.</div>
+          <div id="future-events"></div>
+        </div>
+        <div class="panel" id="ctx-panel">
+          <h3>Market context</h3>
+          <div class="panel-sub">Qualitative context only — recent benchmark levels, entirely separate from the historical analysis.</div>
+          <div id="market-context"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <details class="method">
+          <summary>Methodology &amp; assumptions</summary>
+          <div id="methodology"></div>
+        </details>
+      </div>
+
+      <div class="footnote" id="footnote"></div>
+    </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="/static/vendor/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
