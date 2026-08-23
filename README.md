@@ -89,14 +89,17 @@ Eight factors, each scored 0–100, combined with transparent weights:
 
 | Factor | Weight | What it measures |
 |---|---|---|
-| Recovery probability | 20% | how often the price returned to pre-dividend levels |
-| Current cycle position | 18% | where the price sits in its ex-dividend cycle *now*, and its discount to the last pre-dividend close |
-| Recovery speed | 17% | median trading days to recover |
-| Pattern consistency | 12% | how repeatable the recovery time has been |
-| Seasonal timing | 10% | whether this month has historically contained lows |
-| Broker sentiment | 10% | current analyst ratings and target-price upside |
-| Typical discount size | 8% | size of the habitual ex-date fall, scaled by how often it recovers |
-| Next window timing | 5% | how soon the next historical entry window arrives |
+| Recovery probability | 17% | how often the price returned to pre-dividend levels |
+| Current cycle position | 16% | where the price sits in its ex-dividend cycle *now*, and its discount to the last pre-dividend close |
+| Recovery speed | 14% | median trading days to recover |
+| Dividend materiality | 14% | whether the dividend is big enough for the dip to be worth timing |
+| Pattern consistency | 10% | how repeatable the recovery time has been |
+| Seasonal timing | 9% | whether this month has historically contained lows |
+| Broker sentiment | 9% | current analyst ratings and target-price upside |
+| Typical discount size | 7% | size of the habitual ex-date fall, scaled by how often it recovers |
+| Next window timing | 4% | how soon the next historical entry window arrives |
+
+**Why materiality is weighted.** Without it the ranking is dominated by low-yield growth stocks: a company paying 0.3% barely moves on its ex-date, so it "recovers" within a day almost every time — scoring near-perfect on recovery speed and probability while offering no dip worth buying. Materiality is scored explicitly so that companies with a real dividend rise above those with a nominal one.
 
 **Missing data is never guessed.** If a factor can't be computed — no broker coverage, say — it is dropped and the remaining weights re-normalised, so a company isn't penalised as though it scored zero. Every row shows how much of the weighting was actually available, plus a confidence level. Companies that can't be scored are listed separately rather than given an invented number.
 
