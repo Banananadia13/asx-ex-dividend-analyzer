@@ -116,6 +116,38 @@ def test_broker_sentiment():
 
 # ---------------- assembly ----------------
 
+def test_dividend_materiality_monotonic():
+    lo, note_lo = op.f_dividend_materiality({"dividend_yield_pct": 0.4})
+    mid, _ = op.f_dividend_materiality({"dividend_yield_pct": 2.0})
+    hi, _ = op.f_dividend_materiality({"dividend_yield_pct": 5.0})
+    assert lo < mid < hi
+    assert hi == 100.0
+    assert "too small" in note_lo
+    assert op.f_dividend_materiality({})[0] is None
+
+
+def test_low_yield_stock_does_not_outrank_real_dividend_payer():
+    """Regression: the live ranking put a 0.5%-yield growth stock at #1.
+
+    A company whose dividend barely moves the price recovers "instantly" and
+    scored near-perfect on speed and probability, beating genuine dividend
+    payers. Materiality must stop that, because a 0.3% dip is nothing to time.
+    """
+    growth = op.score_company(
+        base_agg(success_rate_pct=95.0, median_recovery_days=0.0,
+                 median_low_days_after_ex=0.0, avg_drop_pct=0.37),
+        events_with([0, 1, 0, 0, 1, 0, 0, 1]), {"available": False},
+        {**ctx_at(td=1, cur=10.0, ref=10.0), "dividend_yield_pct": 0.5})
+    payer = op.score_company(
+        base_agg(success_rate_pct=89.5, median_recovery_days=16.5,
+                 median_low_days_after_ex=8.0, avg_drop_pct=2.55),
+        events_with([16, 20, 12, 18, 14, 22]), {"available": False},
+        {**ctx_at(td=8, cur=9.5, ref=10.0), "dividend_yield_pct": 3.8})
+    assert payer["score"] > growth["score"], (
+        f"low-yield stock ({growth['score']}) still outranks a real dividend "
+        f"payer ({payer['score']})")
+
+
 def test_score_bounds_and_band():
     s = op.score_company(base_agg(), events_with([40] * 10), {"available": False}, ctx_at())
     assert s["score"] is not None
