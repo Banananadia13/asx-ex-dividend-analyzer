@@ -1,0 +1,82 @@
+name: Build and publish site
+
+# The live site is static, but the analysis behind it is Python. This job runs
+# that Python on GitHub's servers, turns the results into JSON, and publishes
+# the whole thing to GitHub Pages — so the site refreshes itself with no one
+# touching it.
+
+on:
+  schedule:
+    # 07:30 UTC daily = 17:30 Melbourne (AEST) / 18:30 (AEDT), after the ASX close.
+    - cron: '30 7 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:        # lets you trigger a refresh by hand from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fastapi uvicorn "yfinance>=0.2.40" "pandas>=2.0" "numpy>=1.26"
+
+      - name: Run tests
+        # Never publish a site built by an engine that fails its own tests.
+        run: python -m pytest backend/tests -q
+
+      - name: Build static site
+        run: python build_site.py --out site
+
+      - name: Verify the build produced real data
+        # Guards against silently publishing an empty or broken site if Yahoo
+        # Finance is unreachable or changes its API.
+        run: |
+          python - <<'PY'
+          import json, sys, pathlib
+          status = json.load(open('site/data/top20/status.json'))
+          scored = [r for r in status['results'] if r.get('score') is not None]
+          print(f"{len(scored)} companies scored, {len(status['failures'])} failed")
+          if len(scored) < 10:
+              sys.exit(f"Only {len(scored)} companies scored — refusing to publish.")
+          for r in scored[:3]:
+              print(f"  #{r['rank']} {r['ticker']}: {r['score']} ({r['band']})")
+          for f in ('index.html', 'app.js', 'styles.css', 'config.js', 'vendor/echarts.min.js'):
+              p = pathlib.Path('site') / f
+              if not p.exists() or p.stat().st_size == 0:
+                  sys.exit(f"Missing or empty: {f}")
+          print("Build verified.")
+          PY
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
