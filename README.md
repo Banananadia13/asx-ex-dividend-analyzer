@@ -1,6 +1,14 @@
 # ASX Ex-Dividend Recovery Analyzer
 
-A desktop app that analyses roughly **20 years of history** for ASX-listed companies and answers one question:
+### 🔗 [**Open the live site →**](https://banananadia13.github.io/asx-ex-dividend-analyzer/)
+
+**Nothing to install.** The live site shows the full ASX 20 ranking and every company's analysis, refreshed automatically each day. It works on a phone.
+
+To analyse *any* ASX company (not just the 20), [download the app](#download-and-run) and run it locally.
+
+---
+
+An app that analyses roughly **20 years of history** for ASX-listed companies and answers one question:
 
 > After a stock goes ex-dividend, how long has it historically taken for the share price to recover to where it was before?
 
@@ -11,6 +19,8 @@ It also ranks the **ASX Top 20** against each other, so you can see which compan
 ---
 
 ## Download and run
+
+*(Only needed if you want to analyse companies outside the ASX 20, or run it offline — otherwise just use the [live site](https://banananadia13.github.io/asx-ex-dividend-analyzer/).)*
 
 **You need [Python 3.9 or newer](https://www.python.org/downloads/)** (free). Most Macs already have it. On Windows, tick **"Add Python to PATH"** during installation.
 
@@ -123,6 +133,14 @@ Check the terminal window — it prints the exact address. If something else is 
 Double-check the ASX code. The app tells you when it can't retrieve data rather than guessing.
 
 ---
+
+## How the live site works
+
+GitHub Pages can only serve static files, so the Python backend can't run there. Instead, a [GitHub Actions workflow](.github/workflows/deploy.yml) runs the analysis on GitHub's servers each day, writes the results as JSON, and publishes them with the frontend.
+
+The JSON is produced by the *same* functions the local API serves (`build_analysis_payload`, `scanner._analyse_one`), so the hosted site and the local app can't drift apart. The workflow runs the test suite first and refuses to publish if fewer than 10 companies scored — so a Yahoo Finance outage leaves the last good site up rather than replacing it with a broken one.
+
+Trade-off: the live site covers only the pre-computed ASX 20 and is as fresh as the last daily run. Run the app locally for any ticker, on demand.
 
 ## For developers
 
