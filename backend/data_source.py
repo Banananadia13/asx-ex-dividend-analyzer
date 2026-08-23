@@ -99,8 +99,24 @@ def fetch_history(ticker: str, refresh: bool = False):
 
     try:
         import yfinance as yf
-        t = yf.Ticker(ticker)
-        px = t.history(period="max", auto_adjust=False, actions=True)
+        # yfinance keeps a small SQLite timezone cache. When several tickers are
+        # fetched concurrently the first writes to it can collide, raising
+        # "database is locked" — which is transient, not a real data failure.
+        # Retry with backoff rather than reporting the company as unavailable.
+        last_exc = None
+        px = None
+        for attempt in range(4):
+            try:
+                t = yf.Ticker(ticker)
+                px = t.history(period="max", auto_adjust=False, actions=True)
+                break
+            except Exception as e:  # noqa: PERF203 - deliberate retry loop
+                last_exc = e
+                if attempt == 3:
+                    raise
+                time.sleep(1.5 * (attempt + 1))
+        if px is None and last_exc is not None:
+            raise last_exc
     except Exception as exc:
         # fall back to stale cache if present, clearly labelled
         if os.path.exists(px_path) and os.path.exists(div_path):

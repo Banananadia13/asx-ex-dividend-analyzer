@@ -66,26 +66,33 @@ UNIVERSE_AS_AT = "2026-08-23"
 # Scoring weights — must sum to 100. Transparent and adjustable.
 # --------------------------------------------------------------------------
 WEIGHTS = {
-    "recovery_probability": 20,   # how often the price got back to pre-dividend
-    "cycle_position": 18,         # where the stock sits in its ex-div cycle NOW
-    "recovery_speed": 17,         # how quickly it historically recovered
-    "consistency": 12,            # how repeatable the recovery time has been
-    "seasonal_timing": 10,        # is this month historically a low-price month
-    "broker_sentiment": 10,       # current published analyst view
-    "drop_magnitude": 8,          # size of the typical post-ex discount
-    "dividend_timing": 5,         # how soon the next entry window arrives
+    "recovery_probability": 17,   # how often the price got back to pre-dividend
+    "cycle_position": 16,         # where the stock sits in its ex-div cycle NOW
+    "recovery_speed": 14,         # how quickly it historically recovered
+    "dividend_materiality": 14,   # is the dividend big enough for this to matter
+    "consistency": 10,            # how repeatable the recovery time has been
+    "seasonal_timing": 9,         # is this month historically a low-price month
+    "broker_sentiment": 9,        # current published analyst view
+    "drop_magnitude": 7,          # size of the typical post-ex discount
+    "dividend_timing": 4,         # how soon the next entry window arrives
 }
 
 FACTOR_LABELS = {
     "recovery_probability": "Recovery probability",
     "cycle_position": "Current cycle position",
     "recovery_speed": "Recovery speed",
+    "dividend_materiality": "Dividend materiality",
     "consistency": "Pattern consistency",
     "seasonal_timing": "Seasonal timing",
     "broker_sentiment": "Broker sentiment",
     "drop_magnitude": "Typical discount size",
     "dividend_timing": "Next window timing",
 }
+
+# A dividend yield at or above this is treated as fully "material" for
+# ex-dividend timing purposes. Below it, the strategy has progressively less
+# to work with, because there is barely a dip to buy.
+MATERIAL_YIELD_PCT = 4.0
 
 BANDS = [
     (80, "Excellent Historical Opportunity", "excellent"),
@@ -169,6 +176,29 @@ def f_drop_magnitude(agg):
         raw *= sr / 100.0
     return clamp(raw), (f"average fall of {drop:.1f}% on the ex-dividend date"
                         + (f", recovered {sr:.0f}% of the time" if sr is not None else ""))
+
+
+def f_dividend_materiality(ctx):
+    """Is the dividend actually big enough for ex-dividend timing to matter?
+
+    Without this, the score is dominated by low-yield growth stocks: a company
+    paying 0.3% barely moves on its ex-date, so it "recovers" within a day,
+    nearly always — scoring near-perfect on recovery speed and probability
+    while offering no dip worth buying. That inverts the whole purpose of the
+    ranking, so materiality is scored explicitly and weighted.
+    """
+    y = ctx.get("dividend_yield_pct")
+    if y is None:
+        return None, "no dividend paid in the last 12 months"
+    score = clamp(y / MATERIAL_YIELD_PCT * 100)
+    if y < 1.0:
+        note = (f"trailing yield of just {y:.1f}% — the ex-dividend dip is too small "
+                f"to time around")
+    elif y < 2.5:
+        note = f"modest trailing yield of {y:.1f}% — a small dip to work with"
+    else:
+        note = f"trailing yield of {y:.1f}% — a meaningful ex-dividend dip"
+    return score, note
 
 
 def f_seasonal_timing(agg, today: date):
@@ -309,6 +339,7 @@ def score_company(agg: dict, events: list, consensus: dict, ctx: dict) -> dict:
         "recovery_probability": f_recovery_probability(agg),
         "cycle_position": f_cycle_position(agg, ctx),
         "recovery_speed": f_recovery_speed(agg),
+        "dividend_materiality": f_dividend_materiality(ctx),
         "consistency": f_consistency(agg, events),
         "seasonal_timing": f_seasonal_timing(agg, today),
         "broker_sentiment": f_broker_sentiment(consensus, ctx),
@@ -366,6 +397,12 @@ def strengths_and_risks(agg: dict, scored: dict, ctx: dict):
             strengths.append(f"{f['label']}: {f['note']}.")
         elif f["score"] <= 40:
             risks.append(f"{f['label']}: {f['note']}.")
+
+    mat = next((f for f in scored["factors"] if f["key"] == "dividend_materiality"), None)
+    if mat and mat["available"] and mat["score"] < 30:
+        risks.append("This company's dividend is small relative to its share price, so the "
+                     "ex-dividend dip is minor — there is little for a dividend-timing "
+                     "approach to work with, however cleanly the price recovers.")
 
     n_dec = agg.get("n_decided", 0)
     if n_dec and n_dec < 10:
